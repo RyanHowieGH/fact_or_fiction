@@ -1,6 +1,11 @@
 @import "tailwindcss";
 @import "tailwindcss/preflight";
-@tailwind utilities;
+@plugin "daisyui";
+
+/* @tailwind utilities;
+@tailwind base;
+@tailwind components; */
+
 
 :root {
   --background: #ffffff;

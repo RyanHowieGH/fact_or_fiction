@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import { createClient } from '@/utils/supabase/client';
+import { createClient } from '@/utils/supabase/client'; // Assuming path alias
 
 export default function UsernameSetter({ user }) {
   const supabase = createClient();
@@ -15,7 +15,7 @@ export default function UsernameSetter({ user }) {
   const fetchUsername = useCallback(async () => {
     if (!user) return;
     setLoading(true);
-    setMessage({ type: '', text: '' });
+    setMessage({ type: '', text: '' }); // Clear message on fetch
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -28,6 +28,8 @@ export default function UsernameSetter({ user }) {
       if (data?.username) {
           setUsername(data.username);
           setCurrentUsername(data.username);
+          // Optionally clear info message if username exists
+          // setMessage({ type: '', text: '' });
       } else {
           setCurrentUsername(null); // Explicitly null if not set
           setUsername(''); // Clear input if no username fetched
@@ -48,84 +50,112 @@ export default function UsernameSetter({ user }) {
 
   const handleUsernameUpdate = async (e) => {
     e.preventDefault();
-    if (!user || !username.trim() || username.trim() === currentUsername) {
+    const trimmedUsername = username.trim();
+
+    if (!user || !trimmedUsername || trimmedUsername === currentUsername) {
          // Don't update if same or empty
-         if(username.trim() === currentUsername) {
+         if(trimmedUsername === currentUsername) {
              setMessage({ type: 'success', text: 'Username is already set.' });
-             setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+             setTimeout(() => setMessage({ type: '', text: '' }), 3000); // Clear message after delay
          }
         return;
     }
-    if (username.trim().length < 3) {
+    if (trimmedUsername.length < 3) {
          setMessage({ type: 'error', text: 'Username must be at least 3 characters.' });
          return;
     }
 
-
     setLoading(true);
-    setMessage({ type: '', text: '' });
+    setMessage({ type: '', text: '' }); // Clear previous messages
     try {
+      // Attempt to update the username in the profiles table
       const { error } = await supabase
         .from('profiles')
-        .update({ username: username.trim(), updated_at: new Date() }) // Use update, trigger should handle insert
-        .eq('id', user.id);
+        // Important: Ensure RLS allows users to update their own profile!
+        // The handle_new_user trigger should have inserted the profile row already.
+        .update({ username: trimmedUsername, updated_at: new Date() })
+        .eq('id', user.id); // Target the correct user
 
       if (error) {
         // Check for unique constraint violation (PostgreSQL code 23505)
         if (error.code === '23505') {
             throw new Error('Username already taken. Please choose another.');
         }
-        throw error; // Re-throw other errors
+        // Check for RLS violation or other DB errors
+        console.error("Supabase Update Error:", error)
+        throw new Error(`Database error: ${error.message}`); // Re-throw other specific errors
       }
 
+      // If update is successful
       setMessage({ type: 'success', text: 'Username updated successfully!' });
-      setCurrentUsername(username.trim()); // Update current state
-       // Clear message after few seconds
+      setCurrentUsername(trimmedUsername); // Update current state to reflect change
+       // Clear success message after few seconds
        setTimeout(() => setMessage({ type: '', text: '' }), 4000);
 
     } catch (error) {
       console.error("Error updating username:", error.message);
+      // Display specific error messages caught above, or a generic one
       setMessage({ type: 'error', text: `Failed to update username: ${error.message}` });
     } finally {
       setLoading(false);
     }
   };
 
-  if (!user) return null; // Don't render if not logged in
+  // Don't render the component if the user is not logged in
+  if (!user) return null;
 
   return (
+    // Card structure
     <div className="card w-full max-w-md bg-base-200 shadow mx-auto my-8">
       <div className="card-body p-4">
-        <h3 className="text-lg font-semibold mb-2">Leaderboard Username</h3>
-        <form onSubmit={handleUsernameUpdate} className="form-control">
-          <div className="join w-full">
-            <input
-              type="text"
-              placeholder="Enter username (min 3 chars)"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="input input-bordered join-item flex-grow input-sm"
-              minLength="3"
-              required
-              disabled={loading}
-            />
-            <button
-                type="submit"
-                className="btn btn-primary join-item btn-sm"
-                disabled={loading || !username.trim() || username.trim() === currentUsername || username.trim().length < 3}
-            >
-              {loading ? <span className="loading loading-spinner loading-xs"></span> : (currentUsername ? 'Update' : 'Set')}
-            </button>
-          </div>
-          {/* Feedback Messages */}
-          {message.text && (
-            <p className={`text-xs mt-1 ${message.type === 'error' ? 'text-error' : message.type === 'success' ? 'text-success' : 'text-info'}`}>
-                {message.text}
-            </p>
-          )}
-           {currentUsername && username.trim() === currentUsername && !message.text && <p className="text-xs mt-1 text-success">Username is set.</p>}
+         {/* Use fieldset/legend for semantic form structure */}
+         <fieldset className="fieldset">
+            <legend className="text-lg font-semibold mb-2">Leaderboard Username</legend>
 
-        </form>
+            <form onSubmit={handleUsernameUpdate} className="mt-1">
+              {/* Visually hidden label for accessibility */}
+              <label className="label sr-only" htmlFor="username-input">Username:</label>
+
+              {/* Use DaisyUI join component for input + button */}
+              <div className="join w-full">
+                <input
+                  id="username-input" // Link label to input
+                  type="text"
+                  placeholder="Username (min 3 chars)"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  // Input has default border in v5, removed 'input-bordered'
+                  // Input size adjusted with 'input-sm'
+                  className="input join-item flex-grow input-sm"
+                  minLength="3"
+                  required
+                  disabled={loading}
+                  aria-describedby="username-feedback" // Link feedback msg to input
+                />
+                <button
+                    type="submit"
+                    // Button size adjusted with 'btn-sm' to match input
+                    className="btn btn-primary join-item btn-sm"
+                    disabled={loading || !username.trim() || username.trim() === currentUsername || username.trim().length < 3}
+                >
+                  {/* Loading spinner */}
+                  {loading ? <span className="loading loading-spinner loading-xs"></span> : (currentUsername ? 'Update' : 'Set')}
+                </button>
+              </div>
+            </form>
+
+            {/* Feedback Messages Area */}
+            <div id="username-feedback" className="min-h-[1.25rem] mt-1"> {/* Reserve space for feedback */}
+                {message.text && (
+                <p className={`text-xs ${message.type === 'error' ? 'text-error' : message.type === 'success' ? 'text-success' : 'text-info'}`}>
+                    {message.text}
+                </p>
+                )}
+                {/* Show confirmation if username is set and matches input, only if no other message */}
+                {currentUsername && username.trim() === currentUsername && !message.text && !loading && <p className="text-xs text-success">Username is set.</p>}
+            </div>
+
+         </fieldset>
       </div>
     </div>
   );

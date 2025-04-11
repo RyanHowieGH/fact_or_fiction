@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import { createClient } from '@/utils/supabase/client';
+import { createClient } from '@/utils/supabase/client'; // Assuming path alias
 
 // Pass user object as a prop
 export default function Game({ user }) {
@@ -31,7 +31,7 @@ export default function Game({ user }) {
         .eq('id', user.id)
         .single();
 
-      if (profileError && profileError.code !== 'PGRST116') {
+      if (profileError && profileError.code !== 'PGRST116') { // Ignore 'row not found' error
         throw profileError;
       }
       setProfile(profileData); // Store profile (might be null if doesn't exist yet)
@@ -51,8 +51,12 @@ export default function Game({ user }) {
     setUserChoice(null);
     setFactData(null);
     try {
+      // Ensure this path '/api/get-fact' corresponds to 'app/api/get-fact/route.js'
       const response = await fetch('/api/get-fact');
-      if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
+      if (!response.ok) {
+          const errorBody = await response.text(); // Get more error details
+          throw new Error(`API Error: ${response.statusText} - ${errorBody}`);
+      }
       const data = await response.json();
       setFactData(data);
     } catch (error) {
@@ -80,7 +84,7 @@ export default function Game({ user }) {
     if (user) { // Only update streak if logged in
       setUpdatingStreak(true);
       try {
-        // Use profile state, but fetch fresh values before update for safety? Or trust state? Let's trust state for now.
+        // Use profile state for current values before update
         const current_streak = profile?.current_streak || 0;
         const current_highest = profile?.highest_streak || 0;
         let newStreak = 0;
@@ -93,13 +97,13 @@ export default function Game({ user }) {
 
         const { data: updatedProfile, error: updateError } = await supabase
           .from('profiles')
-          .upsert({
+          .upsert({ // Use upsert for robustness (handles insert if profile somehow doesn't exist)
             id: user.id,
             current_streak: newStreak,
             highest_streak: newHighestStreak,
             updated_at: new Date().toISOString()
           })
-          .select('current_streak, highest_streak') // Select the updated data
+          .select('current_streak, highest_streak') // Select the updated data back
           .single();
 
         if (updateError) throw updateError;
@@ -119,10 +123,11 @@ export default function Game({ user }) {
   // Render feedback message
   const renderFeedback = () => {
     if (!showAnswer) return null;
-    if (feedback === 'correct') return <div className="alert alert-success mt-4">Correct!</div>;
-    if (feedback === 'incorrect') return <div className="alert alert-error mt-4">Incorrect! The actual fact is: "{factData?.originalFact}"</div>;
-    if (feedback === 'error-fetch') return <div className="alert alert-warning mt-4">Could not load fact. Try again?</div>;
-    if (feedback === 'error-streak') return <div className="alert alert-warning mt-4">Streak update failed. Answer recorded.</div>;
+    // Alert classes seem stable
+    if (feedback === 'correct') return <div className="alert alert-success mt-4 shadow-md">Correct!</div>;
+    if (feedback === 'incorrect') return <div className="alert alert-error mt-4 shadow-md">Incorrect! The actual fact is: "{factData?.originalFact}"</div>;
+    if (feedback === 'error-fetch') return <div className="alert alert-warning mt-4 shadow-md">Could not load fact. Try again?</div>;
+    if (feedback === 'error-streak') return <div className="alert alert-warning mt-4 shadow-md">Streak update failed. Answer recorded.</div>;
     return null;
   };
 
@@ -130,6 +135,7 @@ export default function Game({ user }) {
 
   // --- Render Logic ---
   return (
+    // Card structure
     <div className="card w-full max-w-lg bg-base-100 shadow-xl mx-auto my-8">
       <div className="card-body">
         <h2 className="card-title text-2xl justify-center mb-4">Fact or Fiction?</h2>
@@ -137,14 +143,16 @@ export default function Game({ user }) {
         {/* Show streak ONLY if user is logged in and profile is loaded */}
         {user && profile && (
           <div className="text-center mb-4 text-lg font-semibold">
+            {/* Loading spinner */}
             Current Streak: {updatingStreak ? <span className="loading loading-xs loading-spinner"></span> : (profile.current_streak ?? 0)}
           </div>
         )}
+        {/* Show loading indicator while profile is fetched */}
         {user && !profile && loadingProfile && (
              <div className="text-center mb-4 text-lg font-semibold">Loading streak...</div>
         )}
 
-        {/* Loading State */}
+        {/* Loading State for Fact */}
         {loadingFact && !factData && <div className="text-center my-10"><span className="loading loading-lg loading-spinner text-primary"></span></div>}
 
         {/* Error Fetching Fact */}
@@ -158,24 +166,26 @@ export default function Game({ user }) {
         {/* Fact Display and Buttons */}
         {!loadingFact && factData && feedback !== 'error-fetch' && (
           <>
-            <p className="text-xl text-center my-6 min-h-[6rem] flex items-center justify-center">
+            <p className="text-xl text-center my-6 min-h-[6rem] flex items-center justify-center px-4">
                 {factData.presentedFact}
             </p>
 
+            {/* Buttons */}
             <div className="card-actions justify-center mt-4">
               <button className="btn btn-success btn-lg" onClick={() => handleAnswer('true')} disabled={showAnswer || isLoading}>True</button>
               <button className="btn btn-error btn-lg" onClick={() => handleAnswer('false')} disabled={showAnswer || isLoading}>False</button>
             </div>
 
+            {/* Feedback Area */}
             <div className="min-h-[4rem] mt-4">{renderFeedback()}</div>
 
-            {/* Next Fact Button */}
+            {/* Next Fact Button - shows after answer or if streak update failed */}
             {(showAnswer || feedback === 'error-streak') && feedback !== 'error-fetch' && (
                 <div className="text-center mt-4">
                     <button
                         onClick={fetchFact}
                         className="btn btn-primary"
-                        disabled={isLoading}
+                        disabled={isLoading} // Disable while any loading is happening
                     >
                         {isLoading ? 'Loading...' : 'Next Fact'}
                     </button>

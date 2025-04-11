@@ -12,13 +12,13 @@ export function createClient() {
         // Define getAll inline as an async function
         getAll: async () => {
           // Invoke cookies() inside the async function
-          const cookieStore = cookies();
+          const cookieStore = await cookies();
           return cookieStore.getAll();
         },
         // Define setAll inline as an async function
         setAll: async (cookiesToSet) => {
           // Invoke cookies() inside the async function
-          const cookieStore = cookies();
+          const cookieStore = await cookies();
           try {
             cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
           } catch (error) {
